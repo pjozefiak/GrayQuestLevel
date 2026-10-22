@@ -108,8 +108,22 @@ local function dropdownStub()
     })
 end
 
+-- The options panel's screenshot checkbox, captured so tests can click it.
+local checkbox
+
+local function checkboxStub()
+    checkbox = widget({
+        scripts = {},
+        SetScript = function(self, k, fn) self.scripts[k] = fn end,
+        SetChecked = function(self, on) self.checked = on and true or false end,
+        GetChecked = function(self) return self.checked end,
+    })
+    return checkbox
+end
+
 function CreateFrame(_, _, _, template)
     if template == "WowStyle1DropdownTemplate" then return dropdownStub() end
+    if template == "UICheckButtonTemplate" then return checkboxStub() end
 
     local f = widget({
         scripts = {},
@@ -130,6 +144,9 @@ function UnitQuestTrivialLevelRange() return 5 end -- the broken flat value
 function UnitXP() return currentXP end
 function UnitXPMax() return 50000 end
 function GetMaxPlayerLevel() return 60 end
+
+local screenshots = 0
+function Screenshot() screenshots = screenshots + 1 end
 
 QuestDifficultyColors = {
     trivial = { r = 0.61, g = 0.61, b = 0.61 },
@@ -524,6 +541,48 @@ check("nor does the default entry", menuEntries[1].isSelected(), false)
 menuEntries[1].setSelected()
 check("picking default clears the setting", GrayQuestLevelCharDB.chatFrame, nil)
 check("and default now reports selected", menuEntries[1].isSelected(), true)
+
+-- ---------------------------------------------------------------------------
+section("screenshot on level-up")
+-- ---------------------------------------------------------------------------
+-- Only the event handling and the setting are checked: whether Screenshot()
+-- is allowed from an addon on this build is something only the client knows.
+
+check("unset means on", GrayQuestLevelCharDB.screenshot, nil)
+check("so the checkbox starts ticked", checkbox and checkbox.checked, true)
+
+screenshots = 0
+fire("PLAYER_LEVEL_UP", 21)
+check("a level-up takes one screenshot", screenshots, 1)
+fire("PLAYER_LEVEL_CHANGED", 20, 21)
+check("the matching PLAYER_LEVEL_CHANGED does not take a second", screenshots, 1)
+fire("PLAYER_LEVEL_CHANGED", 21, 22)
+check("PLAYER_LEVEL_CHANGED alone is enough, for builds without PLAYER_LEVEL_UP", screenshots, 2)
+fire("PLAYER_LEVEL_CHANGED", 22, 21)
+check("a level going down is not a level-up", screenshots, 2)
+
+checkbox:SetChecked(false)
+checkbox.scripts.OnClick(checkbox)
+check("unticking the box saves false per character", GrayQuestLevelCharDB.screenshot, false)
+check("and nothing account-wide", GrayQuestLevelDB.screenshot, nil)
+fire("PLAYER_LEVEL_UP", 23)
+check("no screenshot while it is off", screenshots, 2)
+
+run("screenshot")
+check("/gql screenshot turns it back on", GrayQuestLevelCharDB.screenshot, true)
+check("and ticks the box to match", checkbox.checked, true)
+check("and says so", chatMatches("screenshot on level%-up ON"), true)
+fire("PLAYER_LEVEL_UP", 24)
+check("screenshots resume", screenshots, 3)
+
+local realScreenshot = Screenshot
+Screenshot = function() error("blocked") end
+check("a Screenshot() that throws does not break the level-up handler",
+    (pcall(fire, "PLAYER_LEVEL_UP", 25)), true)
+Screenshot = nil
+check("nor does one that is missing", (pcall(fire, "PLAYER_LEVEL_UP", 26)), true)
+check("and neither took a picture", screenshots, 3)
+Screenshot = realScreenshot
 
 -- ---------------------------------------------------------------------------
 section("the box position is per character")

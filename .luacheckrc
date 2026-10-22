@@ -66,7 +66,7 @@ read_globals = {
 	-- misc API
 	"GetTime", "GetServerTime", "GetLocale", "GetAddOnMetadata",
 	"GetSpellInfo", "GetItemInfo", "GetMoney", "GetInstanceInfo",
-	"GetCVar", "SetCVar", "IsAddOnLoaded", "ReloadUI", "print",
+	"GetCVar", "SetCVar", "IsAddOnLoaded", "ReloadUI", "print", "Screenshot",
 	"hooksecurefunc", "securecall", "issecurevariable", "wipe", "tContains",
 	"tInvert", "CopyTable", "Mixin", "CreateFromMixins", "bit",
 

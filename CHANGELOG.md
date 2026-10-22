@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.7] - 22.10.2026
+
+### Added
+- Level up screenshot option
+
 ## [0.6.7] - 13.10.2026
 
 ### Added

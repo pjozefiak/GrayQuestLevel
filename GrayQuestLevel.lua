@@ -72,6 +72,17 @@ local function SetChatFrame(index)
     if refreshOptions then pcall(refreshOptions) end
 end
 
+-- Screenshot on level-up, per character. On by default, so only an explicit
+-- false turns it off -- a character that has never touched it reads nil.
+local function ScreenshotOnLevel()
+    return GrayQuestLevelCharDB.screenshot ~= false
+end
+
+local function SetScreenshotOnLevel(on)
+    GrayQuestLevelCharDB.screenshot = on and true or false
+    if refreshOptions then pcall(refreshOptions) end
+end
+
 -- ---------------------------------------------------------------------------
 -- Safe reads
 -- ---------------------------------------------------------------------------
@@ -572,10 +583,23 @@ local function BuildOptions()
         pcall(dd.SetSize, dd, 200, 32)
     end
 
-    -- Keep the closed dropdown's label in step with the setting, however it
-    -- was changed -- the slash command bypasses the panel entirely.
+    local shot = SafeCreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    if shot then
+        pcall(shot.SetPoint, shot, "TOPLEFT", dd or note, "BOTTOMLEFT", dd and 12 or -4, -16)
+        pcall(shot.SetScript, shot, "OnClick", function(self)
+            SetScreenshotOnLevel(self:GetChecked())
+        end)
+        -- Own label rather than the template's: its text key has moved between builds.
+        local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        label:SetPoint("LEFT", shot, "RIGHT", 4, 0)
+        label:SetText("Take a screenshot on level-up (saved per character)")
+    end
+
+    -- Keep the controls in step with the settings, however they were changed --
+    -- the slash commands bypass the panel entirely.
     refreshOptions = function()
-        if not dd then return end
+        if shot then pcall(shot.SetChecked, shot, ScreenshotOnLevel()) end
+        if not (dd and wired) then return end
         local label = ChatTargetName()
         if not pcall(dd.SetDefaultText, dd, label) then
             pcall(UIDropDownMenu_SetText, dd, label)
@@ -587,7 +611,7 @@ local function BuildOptions()
     if not pcall(Settings.RegisterAddOnCategory, category) then return false end
 
     optionsCategory = category
-    if wired then refreshOptions() end
+    refreshOptions()
     return true
 end
 
@@ -667,6 +691,19 @@ local function OnQuestTurnedIn(questID, xpReward)
     Say(("  Stored EXP now %d."):format(after))
 end
 
+-- PLAYER_LEVEL_UP and PLAYER_LEVEL_CHANGED both fire for one ding, so the level
+-- already captured is remembered and the second event is ignored.
+local lastShotLevel
+
+local function LevelUpScreenshot(newLevel)
+    newLevel = tonumber(newLevel)
+    if not newLevel or not ScreenshotOnLevel() or type(Screenshot) ~= "function" then return end
+    if lastShotLevel and newLevel <= lastShotLevel then return end
+    lastShotLevel = newLevel
+    -- A moment's delay so the level-up banner is in the shot.
+    C_Timer.After(1, function() pcall(Screenshot) end)
+end
+
 local function SafeRegister(event)
     pcall(frame.RegisterEvent, frame, event) -- unknown events throw on this client
 end
@@ -698,6 +735,14 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
         CacheQuestLevels()
     elseif event == "PLAYER_LEVEL_UP" or event == "PLAYER_LEVEL_CHANGED" then
         pendingLevelUp = true
+        -- PLAYER_LEVEL_UP carries the new level; PLAYER_LEVEL_CHANGED is (old, new)
+        -- and also fires on a drop, which is no occasion for a picture.
+        if event == "PLAYER_LEVEL_UP" then
+            pcall(LevelUpScreenshot, arg1)
+        else
+            local ok, up = pcall(function() return arg2 > arg1 end)
+            if ok and up then pcall(LevelUpScreenshot, arg2) end
+        end
         C_Timer.After(0.5, function() ApplyGrind(SampleXP()); Update() end)
     elseif event == "UNIT_LEVEL" then
         if arg1 == "player" then C_Timer.After(0.5, Update) end
@@ -874,6 +919,10 @@ SlashCmdList.GRAYQUESTLEVEL = function(msg)
             -- Said in the new window, so it doubles as proof the routing works.
             Say(("|cff40c040Gray Quest Level|r: now printing here (%s)."):format(ChatTargetName()))
         end
+    elseif cmd == "screenshot" then
+        SetScreenshotOnLevel(not ScreenshotOnLevel())
+        Say("|cff40c040Gray Quest Level|r: screenshot on level-up "
+            .. (ScreenshotOnLevel() and "ON" or "OFF") .. " for this character.")
     elseif cmd == "options" or cmd == "config" then
         if not OpenOptions() then
             Say("|cff40c040Gray Quest Level|r: no options panel on this client - use /gql chat.")
@@ -957,6 +1006,6 @@ SlashCmdList.GRAYQUESTLEVEL = function(msg)
             Say(("  Stored EXP: %d, grinding %s."):format(StoredXP(), Grinding() and "ON" or "off"))
         end
         Say("  /gql grind | exp <+/-n> | quest <full> | lock | reset | hide | show")
-        Say("  /gql xp <n> | calibrate <n> | source <s> | chat <n> | xpdb | options | debug")
+        Say("  /gql xp <n> | calibrate <n> | source <s> | chat <n> | xpdb | screenshot | options | debug")
     end
 end
