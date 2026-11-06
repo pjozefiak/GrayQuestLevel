@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.8] - 06.11.2026
+
+### Added
+- Better quest paste
+
 ## [0.7] - 22.10.2026
 
 ### Added

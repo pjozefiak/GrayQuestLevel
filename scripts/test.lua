@@ -58,6 +58,7 @@ end
 local playerLevel, currentXP = 20, 1000
 -- The single quest sitting in the stubbed log; sections set these directly.
 local questLogID, questLogLevel = 437, 14
+local questLogTitle
 local storedShown = false
 local fontStrings = {}
 local theFrame
@@ -164,7 +165,7 @@ C_QuestLog = {
     GetNumQuestLogEntries = function() return 1 end,
     GetInfo = function(i)
         if i ~= 1 then return nil end
-        return { questID = questLogID, level = questLogLevel, isHeader = false }
+        return { questID = questLogID, level = questLogLevel, title = questLogTitle, isHeader = false }
     end,
 }
 
@@ -189,10 +190,13 @@ end
 
 -- Chat goes into a buffer so tests can assert on what the addon said.
 local chat = {}
+local lastPrinted -- as sent, colour codes and all; `chat` holds it stripped
+
 function print(...)
     local parts = {}
     for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
-    chat[#chat + 1] = (table.concat(parts, " "):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+    lastPrinted = table.concat(parts, " ")
+    chat[#chat + 1] = (lastPrinted:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
 
 -- ---------------------------------------------------------------------------
@@ -403,7 +407,7 @@ check("and explains why", chatMatches("already settled"), true)
 
 -- A gray quest that is NOT in the file: the one case that prompts.
 run("exp -100000")
-questLogID = 503
+questLogID, questLogTitle = 503, "The Dead Fields"
 fire("QUEST_ACCEPTED")
 fire("QUEST_TURNED_IN", 503, 250)
 check("a missing gray quest is reported", chatMatches("gray quest 503 %(level 10%) paid 250 XP"), true)
@@ -414,8 +418,18 @@ check("and no debt guessed at", stored(), 0)
 -- The manual path still works, and tells you what to put in the file.
 run("quest 1000")
 check("/gql quest stores the difference", stored(), 750)
-check("and shows the entry to add", chatMatches("%[503%] = 1000"), true)
+check("and prints the entry bare, ready to paste", lastPrinted, "[503] = 1000, -- The Dead Fields (10)")
+local pasted = loadstring("return {\n" .. lastPrinted .. "\n}")
+check("which is valid in the table", pasted and pasted()[503], 1000)
 check("without writing it anywhere", GrayQuestLevelDB.questXP, nil)
+
+-- A hand-in the log never showed us has no title or level, but is still pasteable.
+run("exp -100000")
+questLogTitle = nil
+fire("QUEST_TURNED_IN", 504, 250)
+run("quest 1000")
+check("an unseen quest still gets an entry, minus the comment", lastPrinted, "[504] = 1000,")
+run("exp -100000")
 
 -- Non-gray hand-ins are silent and do nothing at all.
 run("exp -100000")

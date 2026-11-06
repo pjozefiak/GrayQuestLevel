@@ -360,9 +360,10 @@ local function CountQuestXP()
 end
 
 -- QUEST_TURNED_IN fires after the quest has already left the log, so its level
--- has to be remembered while it is still there. Rebuilt on login and on accept
--- rather than on QUEST_LOG_UPDATE, which fires far too often to scan on.
+-- and title have to be remembered while it is still there. Rebuilt on login and
+-- on accept rather than on QUEST_LOG_UPDATE, which fires far too often to scan on.
 local questLevels = {}
+local questTitles = {}
 
 local function CacheQuestLevels()
     if type(C_QuestLog) ~= "table" or type(C_QuestLog.GetNumQuestLogEntries) ~= "function" then return end
@@ -372,6 +373,7 @@ local function CacheQuestLevels()
         local ok2, info = pcall(C_QuestLog.GetInfo, i)
         if ok2 and type(info) == "table" and not info.isHeader and info.questID then
             questLevels[info.questID] = tonumber(info.level)
+            questTitles[info.questID] = type(info.title) == "string" and info.title or nil
         end
     end
 end
@@ -657,9 +659,10 @@ local function OnQuestTurnedIn(questID, xpReward)
     local level = questID and questLevels[questID]
     GrayQuestLevelCharDB.lastQuestXP = xpReward
     GrayQuestLevelCharDB.lastQuestLevel = level
+    GrayQuestLevelCharDB.lastQuestTitle = questID and questTitles[questID]
     GrayQuestLevelCharDB.lastQuestID = questID
     GrayQuestLevelCharDB.lastQuestSettled = false
-    if questID then questLevels[questID] = nil end
+    if questID then questLevels[questID], questTitles[questID] = nil, nil end
 
     -- Only gray quests are reduced, so only they owe anything.
     local _, _, highestGray = Compute()
@@ -865,9 +868,15 @@ SlashCmdList.GRAYQUESTLEVEL = function(msg)
             Say(("|cff40c040Gray Quest Level|r: %d full - %d paid = |cffffd100%d|r stored (total %d).")
                 :format(full, awarded, owed, after))
             -- Counted for this hand-in only; nothing is written back.
+            -- Printed bare, with no colour codes, so it can be pasted straight in.
             if GrayQuestLevelCharDB.lastQuestID then
-                Say(("  Add |cffffd100[%s] = %d|r to QuestXP.lua to keep it.")
-                    :format(tostring(GrayQuestLevelCharDB.lastQuestID), full))
+                local entry = ("[%s] = %d,"):format(tostring(GrayQuestLevelCharDB.lastQuestID), full)
+                local title, level = GrayQuestLevelCharDB.lastQuestTitle, GrayQuestLevelCharDB.lastQuestLevel
+                if title then
+                    entry = ("%s -- %s"):format(entry, title)
+                    if level then entry = ("%s (%d)"):format(entry, level) end
+                end
+                Say(entry)
             end
         end
     elseif cmd == "xpdb" then
