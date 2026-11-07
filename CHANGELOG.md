@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.9] - 07.11.2026
+
+### Added
+- Debt count for grinding modes
+
 ## [0.8] - 06.11.2026
 
 ### Added

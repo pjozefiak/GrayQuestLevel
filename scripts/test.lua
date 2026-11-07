@@ -251,6 +251,8 @@ end
 
 local function stored() return GrayQuestLevelCharDB.storedXP or 0 end
 
+local function killLine() return plain(fontStrings[3].text) end
+
 local function gainXP(amount)
     currentXP = currentXP + amount
     fire("PLAYER_XP_UPDATE")
@@ -326,14 +328,19 @@ run("exp 1000")
 check("grinding starts off", GrayQuestLevelCharDB.grinding, nil)
 gainXP(300)
 check("XP does not touch the debt while grinding is off", stored(), 1000)
+check("and the kill line shows no debt count", killLine():find("%("), nil)
 
 run("grind")
 check("/gql grind toggles on", GrayQuestLevelCharDB.grinding, true)
+check("the kill line adds kills to clear the debt (1000 / 300, rounded up)",
+    killLine():match("%((%d+)%)$"), "4")
 gainXP(300)
 check("XP now pays the debt down", stored(), 700)
+check("and the debt count follows it", killLine():match("%((%d+)%)$"), "3")
 gainXP(800)
 check("overpaying clamps at zero", stored(), 0)
 check("and says so", chatMatches("stored EXP cleared"), true)
+check("no debt, no count", killLine():find("%("), nil)
 
 run("grind")
 check("/gql grind toggles back off", GrayQuestLevelCharDB.grinding, false)

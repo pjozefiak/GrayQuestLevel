@@ -478,12 +478,17 @@ local function Update()
     end
 
     -- Line 2: kills to level. When `kills` is nil the second return is the
-    -- reason string rather than an XP amount.
-    local ok2, kills, reason = pcall(ComputeKills)
+    -- reason string rather than an XP amount. While grinding, the kills the
+    -- debt needs follow in green, at the same last-gain rate.
+    local ok2, kills, reason, gain = pcall(ComputeKills)
     if not ok2 then
         killText:SetText("|cff808080Kills to level: ?|r")
     elseif kills then
-        killText:SetText(("Kills to level: |cffffd100%d|r"):format(kills))
+        local debt = ""
+        if Grinding() and stored > 0 then
+            debt = ("  |cff40c040(%d)|r"):format(math.ceil(stored / gain))
+        end
+        killText:SetText(("Kills to level: |cffffd100%d|r%s"):format(kills, debt))
     else
         if reason == "max level" then
             killText:SetText("|cff808080Max level|r")
