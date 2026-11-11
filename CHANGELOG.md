@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.10] - 10.11.2026
+
+### Added
+- Accurate semi-manual WoWhead dump method
+
 ## [0.9] - 07.11.2026
 
 ### Added

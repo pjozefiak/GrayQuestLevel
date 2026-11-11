@@ -1,39 +1,54 @@
--- Merge quest XP values out of saved Wowhead quest-listing pages into
--- QuestXP.lua, grouped by zone.
+-- Merge one zone's quest XP values, pasted from Wowhead's "Copy all" option,
+-- into QuestXP.lua.
 --
---   lua5.1 scripts/import-questxp.lua "wowhead-dump/Forever Silverpine Forest Quests.html"
---   lua5.1 scripts/import-questxp.lua wowhead-dump/*.html      -- re-import everything
---   lua5.1 scripts/import-questxp.lua --dry-run <file>         -- report, write nothing
+--   lua5.1 scripts/import-questxp.lua quest_dump.txt "Ashenvale" 331
+--   lua5.1 scripts/import-questxp.lua --dry-run quest_dump.txt "Ashenvale" 331   -- report, write nothing
 --
--- Fully offline: it reads the files it is given and writes QuestXP.lua. It
--- never contacts Wowhead.
+-- The zone name and ID are not in the paste, so they are given here. The ID is
+-- in the zone's Wowhead URL (.../forever/zone=331/ashenvale -> 331). Lists that
+-- are not a zone use Wowhead's category ID: negative for class quests (Paladin
+-- -141), and 0 is used here for Uncategorized.
 --
--- Wowhead renders those tables client-side from a `new Listview({... data:[...]})`
--- blob, so the values are already structured -- each record carries "id", "xp",
--- "name" and "level". That is what this reads, not the rendered table.
+-- Fully offline: it reads the file it is given and writes QuestXP.lua.
 --
--- Entries are kept in zone groups, in the order the zones were first imported,
--- sorted by quest ID within each zone. The grouping is read back out of
--- QuestXP.lua on each run, so re-importing preserves it. Existing values are
--- never overwritten; a disagreement is reported instead.
+-- The paste is column-wise, not row-wise: one line per column, each a
+-- comma-separated list with one item per quest, in the same order:
+--
+--   1. quest IDs      79192, 79007, 97003, ...
+--   2. names          Stepping Stones, "Wrongly Blamed, Justly Corrected", ...
+--   3. levels         24, 22, Elite 21, Dungeon 30, ...
+--   4. XP rewards     1950, 1750, 2050, ...
+--
+-- A name containing a comma is quoted, so the lists are split CSV-style rather
+-- than on every comma. All four must have the same length, and every ID and XP
+-- must be a number; otherwise nothing is written, since one bad split would
+-- shift every quest after it onto the wrong value.
+--
+-- Entries are kept in zone groups ordered by zone ID, sorted by quest ID within
+-- each zone. The grouping is read back out of QuestXP.lua on each run.
+-- Existing values are never overwritten; a disagreement is reported instead,
+-- as is a quest already filed under a different zone (breadcrumbs appear in
+-- more than one zone's list).
 
 ---@diagnostic disable: undefined-global
 
 local SCRIPT_DIR = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local QUESTXP_FILE = SCRIPT_DIR .. "/../QuestXP.lua"
 
-local ZONE_MARKER = "^%s*%-%-%s*(.+)%s+%(zone%s+(%d+)%)%s*$"
+-- Negative IDs are Wowhead's non-zone categories, e.g. class quests (Paladin -141).
+local ZONE_MARKER = "^%s*%-%-%s*(.+)%s+%(zone%s+(%-?%d+)%)%s*$"
 local ENTRY_LINE = "^%s*%[(%d+)%]%s*=%s*(%d+)%s*,%s*(.*)$"
 
 local dryRun = false
-local inputPaths = {}
+local positional = {}
 for i = 1, #arg do
-    if arg[i] == "--dry-run" then dryRun = true else inputPaths[#inputPaths + 1] = arg[i] end
+    if arg[i] == "--dry-run" then dryRun = true else positional[#positional + 1] = arg[i] end
 end
 
-if #inputPaths == 0 then
-    io.write("usage: lua5.1 scripts/import-questxp.lua [--dry-run] <page.html> [more.html ...]\n")
-    io.write("       lua5.1 scripts/import-questxp.lua wowhead-dump/*.html   -- re-import everything\n")
+local dumpPath, zoneName, zoneID = positional[1], positional[2], tonumber(positional[3] or "")
+if not (dumpPath and zoneName and zoneName:match("%S") and zoneID) or #positional > 3 then
+    io.write("usage: lua5.1 scripts/import-questxp.lua [--dry-run] <dump.txt> <zone name> <zone id>\n")
+    io.write('       lua5.1 scripts/import-questxp.lua quest_dump.txt "Ashenvale" 331\n')
     os.exit(2)
 end
 
@@ -45,13 +60,11 @@ end
 -- at the end, so a parsing slip cannot quietly drop entries.
 
 local header = {}        -- preamble lines, reproduced verbatim
-local groups = {}        -- ordered: { zone = id or nil, name = string, ids = {}, entries = {} }
+local groups = {}        -- { zone = id or nil, name = string, entries = { [id] = { xp, comment } } }
 local groupByZone = {}
 local zoneOf = {}        -- quest id -> group, for cross-zone duplicate detection
 local droppedLines = {}
 
--- Entries are held in a map and sorted at write time, so moving one between
--- groups is just two assignments.
 local function newGroup(zone, name, unattributed)
     local g = { zone = zone, name = name, entries = {}, unattributed = unattributed }
     groups[#groups + 1] = g
@@ -89,10 +102,9 @@ do
             if zone then
                 current = groupByZone[tonumber(zone)] or newGroup(tonumber(zone), name)
             elseif id then
-                -- Entries before any zone marker: hand-added, or written by a
-                -- version of this script that did not group. Either way they
-                -- can be adopted by a zone that turns out to list them.
-                current = current or newGroup(nil, "Not attributed to a zone", true)
+                -- Entries above the first zone header were added by hand; a
+                -- zone whose list includes them adopts them.
+                current = current or newGroup(nil, "not attributed to a zone", true)
                 id = tonumber(id)
                 current.entries[id] = { xp = tonumber(xp), comment = trailing:match("^%-%-%s*(.*)$") }
                 zoneOf[id] = current
@@ -109,195 +121,173 @@ do
     end
 end
 
+-- Rewriting would lose these, so stop rather than drop someone's edit.
+if #droppedLines > 0 then
+    io.write("QuestXP.lua has lines inside the table this script does not understand:\n")
+    for _, l in ipairs(droppedLines) do io.write(("  %s\n"):format(l)) end
+    io.write("fix or remove them first; nothing written\n")
+    os.exit(1)
+end
+
 local existingCount = 0
 for _ in pairs(zoneOf) do existingCount = existingCount + 1 end
 
 -- ---------------------------------------------------------------------------
--- Read the saved pages
+-- Read the paste
 -- ---------------------------------------------------------------------------
 
--- Wowhead JSON-escapes names: \/ for slashes, \uXXXX for anything non-ASCII.
-local function unescape(s)
-    s = s:gsub("\\/", "/"):gsub('\\"', '"')
-    s = s:gsub("\\u(%x%x%x%x)", function(hex)
-        local code = tonumber(hex, 16)
-        return code < 128 and string.char(code) or "?"
-    end)
-    return (s:gsub("[\r\n]", " "))
-end
-
--- The data array has to be walked rather than pattern-matched. Records carry a
--- nested "envChange":{...} so brace counting is needed, and the page holds
--- other Listviews (comments, the viewer's own profile) with their own "id"
--- fields. An earlier version paired each "id" with the following "xp"; a stray
--- profile id between a quest's id and its xp silently replaced a real quest
--- with a bogus entry. So: find the quest Listview, isolate its array, split it
--- into records, and only then read fields.
-local function sliceArray(text, startPos)
-    local depth, inString, escaped = 0, false, false
-    for i = startPos, #text do
-        local c = text:sub(i, i)
-        if inString then
-            if escaped then escaped = false
-            elseif c == "\\" then escaped = true
-            elseif c == '"' then inString = false end
-        elseif c == '"' then inString = true
-        elseif c == "[" or c == "{" then depth = depth + 1
-        elseif c == "]" or c == "}" then
-            depth = depth - 1
-            if depth == 0 then return text:sub(startPos, i) end
+-- Split one comma-separated list. A quoted item may contain commas, and ""
+-- inside quotes is a literal quote.
+local function splitList(line)
+    local items, i, n = {}, 1, #line
+    while true do
+        while line:sub(i, i):match("^%s$") do i = i + 1 end
+        local item
+        if line:sub(i, i) == '"' then
+            local buf, j = {}, i + 1
+            while true do
+                local c = line:sub(j, j)
+                if c == "" then return nil, ("unterminated quote starting at character %d"):format(i) end
+                if c == '"' then
+                    if line:sub(j + 1, j + 1) ~= '"' then break end
+                    buf[#buf + 1] = '"'
+                    j = j + 2
+                else
+                    buf[#buf + 1] = c
+                    j = j + 1
+                end
+            end
+            item = table.concat(buf)
+            i = j + 1
+            while line:sub(i, i):match("^%s$") do i = i + 1 end
+        else
+            local comma = line:find(",", i, true) or (n + 1)
+            item = line:sub(i, comma - 1):gsub("%s+$", "")
+            i = comma
         end
-    end
-end
-
--- Takes the array including its brackets; the interior is split, so a record's
--- own `{` sits at depth 1 rather than 2.
-local function splitRecords(array)
-    local interior = array:sub(2, -2)
-    local records, depth, inString, escaped, from = {}, 0, false, false, nil
-    for i = 1, #interior do
-        local c = interior:sub(i, i)
-        if inString then
-            if escaped then escaped = false
-            elseif c == "\\" then escaped = true
-            elseif c == '"' then inString = false end
-        elseif c == '"' then inString = true
-        elseif c == "{" then
-            depth = depth + 1
-            if depth == 1 then from = i end
-        elseif c == "}" then
-            if depth == 1 and from then records[#records + 1] = interior:sub(from, i) end
-            depth = depth - 1
-        elseif c == "[" then depth = depth + 1
-        elseif c == "]" then depth = depth - 1
+        items[#items + 1] = item
+        if i > n then return items end
+        if line:sub(i, i) ~= "," then
+            return nil, ("expected a comma at character %d after %q"):format(i, item)
         end
-    end
-    return records
-end
-
-local function titleCase(slug)
-    local words = (slug:gsub("%-", " "))
-    return (words:gsub("(%a[%w']*)", function(w) return w:sub(1, 1):upper() .. w:sub(2) end))
-end
-
--- Zone from the listview's own "quest givers in <zone>" link, falling back to
--- the page title. Not the filename, which the user is free to rename.
-local function zoneFromHtml(html)
-    local id, slug = html:match("zone=(%d+)/([a-z0-9%-]+)")
-    if id then return tonumber(id), titleCase(slug) end
-    local title = html:match("<title>%s*(.-)%s*</title>")
-    if title then
-        return nil, (title:gsub("^Forever%s+", ""):gsub("%s+Quests$", ""))
+        i = i + 1
     end
 end
 
--- Returns zone id, zone name and the records, or nil plus a reason.
-local function readPage(path)
-    local f = io.open(path, "r")
-    if not f then return nil, "cannot read it" end
-    local html = f:read("*a")
+local records, recordCount = {}, 0
+do
+    local f = io.open(dumpPath, "r")
+    if not f then
+        io.write(("cannot read %s\n"):format(dumpPath))
+        os.exit(1)
+    end
+    local lines = {}
+    for line in f:lines() do
+        line = line:gsub("\r$", "")
+        if line:match("%S") then lines[#lines + 1] = line end
+    end
     f:close()
 
-    local listviewPos = html:find("new Listview%(%{template: 'quest'")
-    if not listviewPos then return nil, "no quest Listview - is it a quest *listing* page?" end
+    if #lines ~= 4 then
+        io.write(("%s: expected 4 non-empty lines (IDs, names, levels, XP), found %d\n")
+            :format(dumpPath, #lines))
+        os.exit(1)
+    end
 
-    local arrayPos = html:find("data:%s*%[", listviewPos)
-    local array = arrayPos and sliceArray(html, (html:find("%[", arrayPos)))
-    if not array then return nil, "found the quest Listview but could not read its data array" end
+    local columns, labels = {}, { "IDs", "names", "levels", "XP" }
+    for k = 1, 4 do
+        local items, err = splitList(lines[k])
+        if not items then
+            io.write(("%s: line %d (%s): %s\n"):format(dumpPath, k, labels[k], err))
+            os.exit(1)
+        end
+        columns[k] = items
+    end
 
-    -- Within an isolated record "level" cannot collide with "reqlevel": the
-    -- pattern includes the opening quote, and reqlevel's quote precedes "req".
-    local records, count = {}, 0
-    for _, record in ipairs(splitRecords(array)) do
-        local id = tonumber(record:match("\"id\":(%d+)"))
-        local xp = tonumber(record:match("\"xp\":(%d+)"))
-        local name = record:match("\"name\":\"(.-)\"")
-        local level = tonumber(record:match("\"level\":(%-?%d+)"))
-        if id and xp and name then
-            count = count + 1
-            records[id] = { xp = xp, name = unescape(name), level = level }
+    local count = #columns[1]
+    for k = 2, 4 do
+        if #columns[k] ~= count then
+            io.write(("%s: columns differ in length - %d IDs, %d names, %d levels, %d XP; nothing written\n")
+                :format(dumpPath, #columns[1], #columns[2], #columns[3], #columns[4]))
+            os.exit(1)
         end
     end
-    if count == 0 then return nil, "no quest records found" end
 
-    local zone, zoneName = zoneFromHtml(html)
-    return zone, zoneName, records, count
+    local bad = {}
+    for r = 1, count do
+        local id, name, level, xp = columns[1][r], columns[2][r], columns[3][r], columns[4][r]
+        local nid, nxp = tonumber(id:match("^%d+$") or ""), tonumber(xp:match("^%d+$") or "")
+        if not (nid and nxp) then
+            bad[#bad + 1] = ("  item %d: id %q, xp %q (%s)"):format(r, id, xp, name)
+        elseif records[nid] then
+            bad[#bad + 1] = ("  item %d: quest %d appears twice"):format(r, nid)
+        else
+            -- "Elite 21", "Dungeon 30": keep the number only, as the file does.
+            records[nid] = { xp = nxp, name = name, level = level:match("(%-?%d+)%s*$") }
+            recordCount = recordCount + 1
+        end
+    end
+    if #bad > 0 then
+        io.write(("%s: items that do not read as quests; nothing written\n"):format(dumpPath))
+        for _, b in ipairs(bad) do io.write(b, "\n") end
+        os.exit(1)
+    end
 end
 
 -- ---------------------------------------------------------------------------
--- Merge, page by page
+-- Merge
 -- ---------------------------------------------------------------------------
 
-local totalAdded, totalAdopted, totalAgreed = 0, 0, 0
+local group = groupByZone[zoneID] or newGroup(zoneID, zoneName)
+group.name = zoneName
+
+local added, adopted, agreed = 0, 0, 0
 local conflicts, elsewhere, zeroXP = {}, {}, {}
 
-for _, path in ipairs(inputPaths) do
-    local zone, zoneName, records, count = readPage(path)
-    if not records then
-        io.write(("%s\n  SKIPPED: %s\n"):format(path, zoneName or "unreadable"))
-    else
-        local group = (zone and groupByZone[zone]) or newGroup(zone, zoneName)
-        -- A zone imported before its name was derivable keeps the better name.
-        if zoneName and zoneName ~= "" then group.name = zoneName end
+for _, id in ipairs(sortedIDs(records)) do
+    local rec = records[id]
+    local owner = zoneOf[id]
+    local label = ("%s (%s)"):format(rec.name, rec.level or "?")
 
-        local added, adopted = 0, 0
-        for _, id in ipairs(sortedIDs(records)) do
-            local rec = records[id]
-            local owner = zoneOf[id]
-            local label = ("%s (%s)"):format(rec.name, tostring(rec.level or "?"))
-
-            if rec.xp == 0 then
-                zeroXP[#zeroXP + 1] = ("[%d] %s"):format(id, rec.name)
-            elseif owner == group then
-                if owner.entries[id].xp == rec.xp then
-                    totalAgreed = totalAgreed + 1
-                    owner.entries[id].comment = label -- name and level now known
-                else
-                    conflicts[#conflicts + 1] = ("[%d] %s: file says %d, page says %d")
-                        :format(id, rec.name, owner.entries[id].xp, rec.xp)
-                end
-            elseif owner and owner.unattributed then
-                -- Ungrouped entry that this zone lists: file it under the zone,
-                -- keeping the value already there.
-                local kept = owner.entries[id]
-                if kept.xp ~= rec.xp then
-                    conflicts[#conflicts + 1] = ("[%d] %s: file says %d, page says %d")
-                        :format(id, rec.name, kept.xp, rec.xp)
-                end
-                owner.entries[id] = nil
-                group.entries[id] = { xp = kept.xp, comment = label }
-                zoneOf[id] = group
-                adopted = adopted + 1
-            elseif owner then
-                -- A real cross-zone duplicate: breadcrumbs appear in two lists.
-                elsewhere[#elsewhere + 1] =
-                    ("[%d] %s: already under %s"):format(id, rec.name, owner.name)
-            else
-                group.entries[id] = { xp = rec.xp, comment = label }
-                zoneOf[id] = group
-                added = added + 1
-            end
+    if rec.xp == 0 then
+        zeroXP[#zeroXP + 1] = ("[%d] %s"):format(id, rec.name)
+    elseif owner == group then
+        if owner.entries[id].xp == rec.xp then
+            agreed = agreed + 1
+        else
+            conflicts[#conflicts + 1] = ("[%d] %s: file says %d, paste says %d")
+                :format(id, rec.name, owner.entries[id].xp, rec.xp)
         end
-
-        totalAdded = totalAdded + added
-        totalAdopted = totalAdopted + adopted
-        io.write(("%s\n  %s: %d records, %d new%s\n"):format(
-            path,
-            group.name .. (zone and (" (zone %d)"):format(zone) or ""),
-            count, added,
-            adopted > 0 and (", %d moved in from ungrouped"):format(adopted) or ""))
+    elseif owner and owner.unattributed then
+        local kept = owner.entries[id]
+        if kept.xp ~= rec.xp then
+            conflicts[#conflicts + 1] = ("[%d] %s: file says %d, paste says %d")
+                :format(id, rec.name, kept.xp, rec.xp)
+        end
+        owner.entries[id] = nil
+        group.entries[id] = { xp = kept.xp, comment = kept.comment or label }
+        zoneOf[id] = group
+        adopted = adopted + 1
+    elseif owner then
+        elsewhere[#elsewhere + 1] = ("[%d] %s: already under %s, file says %d, paste says %d")
+            :format(id, rec.name, owner.name, owner.entries[id].xp, rec.xp)
+    else
+        group.entries[id] = { xp = rec.xp, comment = label }
+        zoneOf[id] = group
+        added = added + 1
     end
 end
 
-io.write(("%d entries in QuestXP.lua before, %d added, %d regrouped, %d already present and agreeing\n")
-    :format(existingCount, totalAdded, totalAdopted, totalAgreed))
+io.write(("%s\n  %s (zone %d): %d quests, %d new%s, %d already present and agreeing\n"):format(
+    dumpPath, zoneName, zoneID, recordCount, added,
+    adopted > 0 and (", %d moved in from ungrouped"):format(adopted) or "", agreed))
+io.write(("  %d entries in QuestXP.lua before\n"):format(existingCount))
 
 for _, c in ipairs(conflicts) do io.write(("  CONFLICT %s - keeping the file's value\n"):format(c)) end
 for _, c in ipairs(elsewhere) do io.write(("  SKIPPED  %s\n"):format(c)) end
-for _, c in ipairs(zeroXP) do io.write(("  SKIPPED  %s: page lists no XP\n"):format(c)) end
-for _, l in ipairs(droppedLines) do io.write(("  DROPPED  unrecognised line: %s\n"):format(l)) end
+for _, c in ipairs(zeroXP) do io.write(("  SKIPPED  %s: no XP listed\n"):format(c)) end
 
-if totalAdded == 0 and totalAdopted == 0 and #droppedLines == 0 then
+if added == 0 and adopted == 0 then
     io.write("  nothing to write\n")
     os.exit(0)
 end
@@ -308,8 +298,13 @@ if dryRun then
 end
 
 -- ---------------------------------------------------------------------------
--- Write it back out, grouped
+-- Write it back out: ungrouped entries first, then zones by zone ID
 -- ---------------------------------------------------------------------------
+
+table.sort(groups, function(a, b)
+    if a.unattributed ~= b.unattributed then return a.unattributed == true end
+    return (a.zone or 0) < (b.zone or 0)
+end)
 
 local lines = {}
 for _, l in ipairs(header) do lines[#lines + 1] = l end
@@ -317,20 +312,19 @@ while lines[#lines] and not lines[#lines]:match("%S") do lines[#lines] = nil end
 lines[#lines + 1] = ""
 lines[#lines + 1] = "GrayQuestLevelQuestXP = {"
 
-local written, groupsWritten = 0, 0
-for _, group in ipairs(groups) do
-    local ids = sortedIDs(group.entries)
+local written, blocksWritten = 0, 0
+for _, g in ipairs(groups) do
+    local ids = sortedIDs(g.entries)
     -- A group can end up empty once its entries are adopted by a real zone.
     if #ids > 0 then
-        groupsWritten = groupsWritten + 1
-        if groupsWritten > 1 then lines[#lines + 1] = "" end
-        lines[#lines + 1] = group.zone
-            and ("    -- %s (zone %d)"):format(group.name, group.zone)
-            or ("    -- %s"):format(group.name)
+        blocksWritten = blocksWritten + 1
+        if blocksWritten > 1 then lines[#lines + 1] = "" end
+        -- Ungrouped entries get no header: a header line here would read back
+        -- as a zone (or as an unknown line) on the next run.
+        if g.zone then lines[#lines + 1] = ("    -- %s (zone %d)"):format(g.name, g.zone) end
         for _, id in ipairs(ids) do
-            local e = group.entries[id]
-            lines[#lines + 1] = ("    [%d] = %d,%s")
-                :format(id, e.xp, e.comment and ("  -- " .. e.comment) or "")
+            local e = g.entries[id]
+            lines[#lines + 1] = ("    [%d] = %d,%s"):format(id, e.xp, e.comment and (" -- " .. e.comment) or "")
             written = written + 1
         end
     end
@@ -360,4 +354,4 @@ end
 local out = assert(io.open(QUESTXP_FILE, "w"))
 out:write(body)
 out:close()
-io.write(("  wrote %d entries across %d zone group(s)\n"):format(written, groupsWritten))
+io.write(("  wrote %d entries across %d zone group(s)\n"):format(written, blocksWritten))
