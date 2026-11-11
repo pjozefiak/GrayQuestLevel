@@ -360,8 +360,11 @@ local function CountQuestXP()
 end
 
 -- QUEST_TURNED_IN fires after the quest has already left the log, so its level
--- and title have to be remembered while it is still there. Rebuilt on login and
--- on accept rather than on QUEST_LOG_UPDATE, which fires far too often to scan on.
+-- and title have to be remembered while it is still there. Rebuilt on login, on
+-- accept, and when the hand-in window opens (QUEST_COMPLETE) rather than on
+-- QUEST_LOG_UPDATE, which fires far too often to scan on. The hand-in window is
+-- the one that matters: the log can still be empty at login, and a quest
+-- accepted in an earlier session is otherwise never seen.
 local questLevels = {}
 local questTitles = {}
 
@@ -669,13 +672,25 @@ local function OnQuestTurnedIn(questID, xpReward)
     GrayQuestLevelCharDB.lastQuestSettled = false
     if questID then questLevels[questID], questTitles[questID] = nil, nil end
 
+    local full = KnownQuestXP(questID)
+
+    -- Without the level there is no telling whether it was gray. Say so rather
+    -- than skip it silently, and hand over the command that would count it.
+    if not level then
+        if xpReward <= 0 then return end
+        Say(("|cff40c040Gray Quest Level|r: could not read the level of quest |cffffd100%s|r"
+            .. " (paid %d XP), so it was not counted.")
+            :format(tostring(questID), xpReward))
+        Say(("  If it was gray: /gql quest %s"):format(full and tostring(full) or "<full XP>"))
+        return
+    end
+
     -- Only gray quests are reduced, so only they owe anything.
     local _, _, highestGray = Compute()
-    if not level or not highestGray or level > highestGray then return end
+    if not highestGray or level > highestGray then return end
 
     -- Missing from QuestXP.lua: say so, with the ID and what it paid, so the
-    -- entry can be added. This is the only prompt the addon ever gives.
-    local full = KnownQuestXP(questID)
+    -- entry can be added.
     if not full then
         Say(("|cff40c040Gray Quest Level|r: gray quest |cffffd100%s|r (level %d) paid %d XP"
             .. " - not in QuestXP.lua.")
@@ -725,6 +740,7 @@ SafeRegister("DISABLE_XP_GAIN")
 SafeRegister("ENABLE_XP_GAIN")
 SafeRegister("QUEST_TURNED_IN")
 SafeRegister("QUEST_ACCEPTED")
+SafeRegister("QUEST_COMPLETE")
 
 frame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "PLAYER_ENTERING_WORLD" then
@@ -739,7 +755,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2)
     elseif event == "QUEST_TURNED_IN" then
         pcall(OnQuestTurnedIn, arg1, arg2)
         Update()
-    elseif event == "QUEST_ACCEPTED" then
+    elseif event == "QUEST_ACCEPTED" or event == "QUEST_COMPLETE" then
         CacheQuestLevels()
     elseif event == "PLAYER_LEVEL_UP" or event == "PLAYER_LEVEL_CHANGED" then
         pendingLevelUp = true

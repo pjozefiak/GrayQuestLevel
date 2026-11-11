@@ -438,6 +438,31 @@ run("quest 1000")
 check("an unseen quest still gets an entry, minus the comment", lastPrinted, "[504] = 1000,")
 run("exp -100000")
 
+-- In game: a quest accepted in an earlier session, with the log still empty
+-- when the login scan ran, reached QUEST_TURNED_IN with no level and was
+-- skipped without a word. Now the hand-in window's QUEST_COMPLETE rescans.
+GrayQuestLevelQuestXP = { [500] = 900, [505] = 1950, [506] = 1200 }
+questLogID, questLogLevel = 505, 10 -- in the log, but never scanned
+fire("QUEST_COMPLETE")
+fire("QUEST_TURNED_IN", 505, 1400)
+check("the hand-in window's rescan lets a never-accepted quest settle", stored(), 550)
+check("with the arithmetic shown", chatMatches("1950 full %- 1400 paid = 550 stored"), true)
+
+-- If the level still cannot be read, it says so instead of staying silent.
+run("exp -100000")
+questLogID = 999 -- the log holds something else; 506 was never seen
+fire("QUEST_TURNED_IN", 506, 400)
+check("an unreadable level is reported", chatMatches("could not read the level of quest 506 %(paid 400 XP%)"), true)
+check("with the command to count it, full value filled in", chatMatches("If it was gray: /gql quest 1200"), true)
+check("and nothing guessed at", stored(), 0)
+run("quest 1200")
+check("which then works as printed", stored(), 800)
+run("exp -100000")
+fire("QUEST_TURNED_IN", 507, 0)
+check("a hand-in that paid nothing is not worth a message", #chat, 0)
+GrayQuestLevelQuestXP = { [500] = 900 }
+questLogLevel = 10
+
 -- Non-gray hand-ins are silent and do nothing at all.
 run("exp -100000")
 questLogID, questLogLevel = 501, 19 -- green at player 20 (gray is 13-)

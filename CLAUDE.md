@@ -91,8 +91,11 @@ Full (un-reduced) quest XP is not in the API. The single source is
 deliberate decision: the user wants one file they control, not a hidden store that can drift
 from it. Don't reintroduce caching of quest values.
 
-A gray hand-in whose quest is missing from the file prints the quest ID and what it paid, and
-is the only prompt the addon gives. `lastQuestSettled` guards against double-counting: when a
+A gray hand-in whose quest is missing from the file prints the quest ID and what it paid. The
+only other hand-in prompt is for a quest whose level could not be read (so gray-ness is unknown):
+it says so and prints the `/gql quest` command, rather than skipping silently. Quest levels are
+cached on login, `QUEST_ACCEPTED` and `QUEST_COMPLETE` (the hand-in window), because
+`QUEST_TURNED_IN` fires after the quest has left the log. `lastQuestSettled` guards against double-counting: when a
 hand-in was settled from the file, `/gql quest` must refuse rather than add the debt again.
 
 There is no file I/O in the WoW sandbox — data files must be `.lua` listed in the `.toc`. JSON
