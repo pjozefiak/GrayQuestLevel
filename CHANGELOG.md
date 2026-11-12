@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## - [0.10.2] - 12.10.2026
+
+### Added
+- Initial dungeon quests
+
 ## [0.10.1] - 11.10.2026
 
 ### Fixed
