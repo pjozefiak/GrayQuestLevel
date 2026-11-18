@@ -158,9 +158,17 @@ local function splitList(line)
                 end
             end
             item = table.concat(buf)
-            i = j + 1
-            while line:sub(i, i):match("^%s$") do i = i + 1 end
-        else
+            local k = j + 1
+            while line:sub(k, k):match("^%s$") do k = k + 1 end
+            if k > n or line:sub(k, k) == "," then
+                i = k
+            else
+                -- Wowhead does not quote a name that merely starts with a quoted
+                -- word ("Pretty Boy" Duncan), so read it literally to the comma.
+                item = nil
+            end
+        end
+        if not item then
             local comma = line:find(",", i, true) or (n + 1)
             item = line:sub(i, comma - 1):gsub("%s+$", "")
             i = comma
