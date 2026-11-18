@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.10.4] - 18.11.2026
+
+### Added
+- 1k Needles quests
+
 ## [0.10.3] - 17.11.2026
 
 ### Added
