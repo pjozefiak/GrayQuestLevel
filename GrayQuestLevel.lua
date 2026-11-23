@@ -509,7 +509,7 @@ local function Update()
     -- Line 1: quest levels, then overall progress to 60 when it can be trusted
     local okPct, pct = pcall(PercentToCap)
     local pctText = (okPct and pct)
-        and ("  |cff808080-|r  |cffffd100%d.%02d%%|r"):format(math.floor(pct / 100), pct % 100) or ""
+        and ("  |cffffd100%d.%02d%%|r"):format(math.floor(pct / 100), pct % 100) or ""
     local ok, _, lowestGreen, highestGray = pcall(Compute)
     if not ok or not lowestGreen then
         questText:SetText("|cffff5555Gray level: unavailable|r" .. pctText)

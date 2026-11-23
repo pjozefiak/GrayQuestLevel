@@ -666,7 +666,7 @@ check("level 1 with no XP is 0.00%", questLine():match("([%d.]+)%%$"), "0.00")
 
 -- Reaching 40 takes 1,154,400 XP: 28.26%.
 playerLevel, currentXP, xpMax = 40, 0, 90700
-check("level 40 is 28.26%", questLine(), "Green 32+  -  Gray 31-  -  28.26%")
+check("level 40 is 28.26%", questLine(), "Green 32+  -  Gray 31-  28.26%")
 
 -- Reaching 59 takes 3,874,900; halfway through 59 adds 104,900 -> 97.43%.
 playerLevel, currentXP, xpMax = 59, 104900, 209800
