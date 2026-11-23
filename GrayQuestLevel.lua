@@ -290,6 +290,42 @@ local function SampleXP()
     return gain
 end
 
+-- ---------------------------------------------------------------------------
+-- Overall progress to 60
+-- ---------------------------------------------------------------------------
+-- The vanilla XP table: XP_TO_LEVEL[n] is the bar length at level n, i.e. the
+-- XP from n to n+1. The API only exposes the current bar (UnitXPMax), so the
+-- earlier levels have to come from a table. 4,084,700 XP in all.
+--
+-- The table is only trusted while it agrees with the client: if UnitXPMax at
+-- the current level differs from the entry here, Forever is not using the
+-- vanilla curve and no percentage is shown rather than a wrong one.
+local XP_TO_LEVEL = {
+    400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600,                       -- 1-10
+    8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200,            -- 11-20
+    25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400,           -- 21-30
+    50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700,           -- 31-40
+    95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200, 147500,  -- 41-50
+    153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800,         -- 51-59
+}
+local XP_CAP_LEVEL = #XP_TO_LEVEL + 1
+local XP_TO_CAP, XP_BEFORE = 0, {}
+for i = 1, #XP_TO_LEVEL do
+    XP_BEFORE[i] = XP_TO_CAP -- total XP needed to reach level i
+    XP_TO_CAP = XP_TO_CAP + XP_TO_LEVEL[i]
+end
+
+-- Whole percent of the 1-60 journey done, floored so 100 means 60. Nil when the
+-- client's bar does not match the table, or the XP cannot be read.
+local function PercentToCap()
+    local level = PlayerLevel()
+    if level >= XP_CAP_LEVEL then return 100 end
+    local xp = SafeNumber(UnitXP, "player")
+    local max = SafeNumber(UnitXPMax, "player")
+    if not xp or not max or max ~= XP_TO_LEVEL[level] then return nil end
+    return math.floor((XP_BEFORE[level] + xp) * 100 / XP_TO_CAP)
+end
+
 -- Returns: killsNeeded, xpRemaining, gainSize — or nil plus a reason string.
 local function ComputeKills()
     if XPDisabled() then return nil, "xp off" end
@@ -469,15 +505,17 @@ local function Update()
             :format(stored, Grinding() and "  |cff40c040(grinding)|r" or ""))
     end
 
-    -- Line 1: quest levels
+    -- Line 1: quest levels, then overall progress to 60 when it can be trusted
+    local okPct, pct = pcall(PercentToCap)
+    local pctText = (okPct and pct) and ("  |cff808080-|r  |cffffd100%d%%|r"):format(pct) or ""
     local ok, _, lowestGreen, highestGray = pcall(Compute)
     if not ok or not lowestGreen then
-        questText:SetText("|cffff5555Gray level: unavailable|r")
+        questText:SetText("|cffff5555Gray level: unavailable|r" .. pctText)
     elseif highestGray < 1 then
-        questText:SetText("|cff40c040Green: all|r  |cff808080-|r  |cff9d9d9dno gray yet|r")
+        questText:SetText("|cff40c040Green: all|r  |cff808080-|r  |cff9d9d9dno gray yet|r" .. pctText)
     else
-        questText:SetText(("|cff40c040Green %d+|r  |cff808080-|r  |cff9d9d9dGray %d-|r")
-            :format(lowestGreen, highestGray))
+        questText:SetText(("|cff40c040Green %d+|r  |cff808080-|r  |cff9d9d9dGray %d-|r%s")
+            :format(lowestGreen, highestGray, pctText))
     end
 
     -- Line 2: kills to level. When `kills` is nil the second return is the

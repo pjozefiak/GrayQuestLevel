@@ -56,6 +56,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local playerLevel, currentXP = 20, 1000
+local xpMax = 50000 -- deliberately off the vanilla table, so no % shows by default
 -- The single quest sitting in the stubbed log; sections set these directly.
 local questLogID, questLogLevel = 437, 14
 local questLogTitle
@@ -143,7 +144,7 @@ function UnitLevel() return playerLevel end
 function UnitEffectiveLevel() return playerLevel end
 function UnitQuestTrivialLevelRange() return 5 end -- the broken flat value
 function UnitXP() return currentXP end
-function UnitXPMax() return 50000 end
+function UnitXPMax() return xpMax end
 function GetMaxPlayerLevel() return 60 end
 
 local screenshots = 0
@@ -646,6 +647,42 @@ check("and never to the account DB", posOf(GrayQuestLevelDB.pos), "LEFT/LEFT 42,
 run("reset")
 check("/gql reset clears the character position", GrayQuestLevelCharDB.pos, nil)
 check("but keeps the flag, so login cannot re-seed it", GrayQuestLevelCharDB.posMigrated, true)
+
+-- ---------------------------------------------------------------------------
+section("overall progress to 60")
+-- ---------------------------------------------------------------------------
+-- Vanilla needs 4,084,700 XP for 1-60. The percentage only shows while the
+-- client's bar length agrees with the vanilla table.
+
+local function questLine() refresh() return plain(questText.text) end
+local savedLevel, savedXP, savedMax = playerLevel, currentXP, xpMax
+
+playerLevel, currentXP, xpMax = 20, 1000, 50000
+check("hidden when the bar does not match the vanilla table",
+    questLine():find("%%") == nil, true)
+
+playerLevel, currentXP, xpMax = 1, 0, 400
+check("level 1 with no XP is 0%", questLine():match("(%d+)%%$"), "0")
+
+-- Reaching 40 takes 1,154,400 XP: 28.26%.
+playerLevel, currentXP, xpMax = 40, 0, 90700
+check("level 40 is 28%", questLine(), "Green 32+  -  Gray 31-  -  28%")
+
+-- Reaching 59 takes 3,874,900; halfway through 59 adds 104,900 -> 97.43%.
+playerLevel, currentXP, xpMax = 59, 104900, 209800
+check("halfway through 59 is 97%", questLine():match("(%d+)%%$"), "97")
+
+-- Floored, so 100 is never shown short of the cap.
+playerLevel, currentXP, xpMax = 59, 209799, 209800
+check("one XP short of 60 is still 99%", questLine():match("(%d+)%%$"), "99")
+
+playerLevel, currentXP, xpMax = 60, 0, 0
+check("level 60 is 100%", questLine():match("(%d+)%%$"), "100")
+
+check("the gray-level parse still reads through the suffix", displayedGray(), 51)
+
+playerLevel, currentXP, xpMax = savedLevel, savedXP, savedMax
+refresh()
 
 -- ---------------------------------------------------------------------------
 

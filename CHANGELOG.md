@@ -2,7 +2,12 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
-## [0.10.7] - 22.11.2025
+## [0.11.0] - 23.11.2026
+
+### Added
+- Exp to 60
+
+## [0.10.7] - 22.11.2026
 
 ### Added
 - Desolace quests
