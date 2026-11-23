@@ -2,10 +2,13 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
-## [0.11.2] - 23.11.2026
+## [0.11.3] - 23.11.2026
 
 ### Added
 - Exp to 60
+
+### Changes
+- Spacing fixes
 
 ## [0.10.7] - 22.11.2026
 
