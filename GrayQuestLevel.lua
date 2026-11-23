@@ -506,18 +506,18 @@ local function Update()
             :format(stored, Grinding() and "  |cff40c040(grinding)|r" or ""))
     end
 
-    -- Line 1: quest levels, then overall progress to 60 when it can be trusted
+    -- Line 1: the lowest green level, then overall progress to 60 when it can be
+    -- trusted. Gray is not shown: it is always lowestGreen - 1, so it said nothing.
     local okPct, pct = pcall(PercentToCap)
     local pctText = (okPct and pct)
-        and (" |cffffd100%d.%02d%%|r"):format(math.floor(pct / 100), pct % 100) or ""
+        and (" |cff808080-|r |cffffd100%d.%02d%%|r"):format(math.floor(pct / 100), pct % 100) or ""
     local ok, _, lowestGreen, highestGray = pcall(Compute)
     if not ok or not lowestGreen then
         questText:SetText("|cffff5555Gray level: unavailable|r" .. pctText)
     elseif highestGray < 1 then
-        questText:SetText("|cff40c040Green: all|r |cff9d9d9dno gray yet|r" .. pctText)
+        questText:SetText("|cff40c040Green: all|r" .. pctText)
     else
-        questText:SetText(("|cff40c040Green %d+|r |cff9d9d9dGray %d-|r%s")
-            :format(lowestGreen, highestGray, pctText))
+        questText:SetText(("|cff40c040Green %d|r%s"):format(lowestGreen, pctText))
     end
 
     -- Line 2: kills to level. When `kills` is nil the second return is the
