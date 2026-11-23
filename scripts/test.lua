@@ -662,24 +662,28 @@ check("hidden when the bar does not match the vanilla table",
     questLine():find("%%") == nil, true)
 
 playerLevel, currentXP, xpMax = 1, 0, 400
-check("level 1 with no XP is 0%", questLine():match("(%d+)%%$"), "0")
+check("level 1 with no XP is 0.00%", questLine():match("([%d.]+)%%$"), "0.00")
 
 -- Reaching 40 takes 1,154,400 XP: 28.26%.
 playerLevel, currentXP, xpMax = 40, 0, 90700
-check("level 40 is 28%", questLine(), "Green 32+  -  Gray 31-  -  28%")
+check("level 40 is 28.26%", questLine(), "Green 32+  -  Gray 31-  -  28.26%")
 
 -- Reaching 59 takes 3,874,900; halfway through 59 adds 104,900 -> 97.43%.
 playerLevel, currentXP, xpMax = 59, 104900, 209800
-check("halfway through 59 is 97%", questLine():match("(%d+)%%$"), "97")
+check("halfway through 59 is 97.43%", questLine():match("([%d.]+)%%$"), "97.43")
 
--- Floored, so 100 is never shown short of the cap.
+-- Floored, so 100.00 is never shown short of the cap (this is 99.9999%).
 playerLevel, currentXP, xpMax = 59, 209799, 209800
-check("one XP short of 60 is still 99%", questLine():match("(%d+)%%$"), "99")
+check("one XP short of 60 is still 99.99%", questLine():match("([%d.]+)%%$"), "99.99")
 
 playerLevel, currentXP, xpMax = 60, 0, 0
-check("level 60 is 100%", questLine():match("(%d+)%%$"), "100")
+check("level 60 is 100.00%", questLine():match("([%d.]+)%%$"), "100.00")
 
 check("the gray-level parse still reads through the suffix", displayedGray(), 51)
+
+-- 1,000 XP in all (600 into level 2) is 0.0245%: the hundredths keep their leading zero.
+playerLevel, currentXP, xpMax = 2, 600, 900
+check("small values keep the leading zero", questLine():match("([%d.]+)%%$"), "0.02")
 
 playerLevel, currentXP, xpMax = savedLevel, savedXP, savedMax
 refresh()

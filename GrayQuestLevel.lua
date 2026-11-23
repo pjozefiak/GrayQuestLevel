@@ -315,15 +315,16 @@ for i = 1, #XP_TO_LEVEL do
     XP_TO_CAP = XP_TO_CAP + XP_TO_LEVEL[i]
 end
 
--- Whole percent of the 1-60 journey done, floored so 100 means 60. Nil when the
+-- Hundredths of a percent of the 1-60 journey done (6767 = 67.67%), floored so
+-- 100.00 means 60. An integer, so formatting never rounds up. Nil when the
 -- client's bar does not match the table, or the XP cannot be read.
 local function PercentToCap()
     local level = PlayerLevel()
-    if level >= XP_CAP_LEVEL then return 100 end
+    if level >= XP_CAP_LEVEL then return 10000 end
     local xp = SafeNumber(UnitXP, "player")
     local max = SafeNumber(UnitXPMax, "player")
     if not xp or not max or max ~= XP_TO_LEVEL[level] then return nil end
-    return math.floor((XP_BEFORE[level] + xp) * 100 / XP_TO_CAP)
+    return math.floor((XP_BEFORE[level] + xp) * 10000 / XP_TO_CAP)
 end
 
 -- Returns: killsNeeded, xpRemaining, gainSize — or nil plus a reason string.
@@ -507,7 +508,8 @@ local function Update()
 
     -- Line 1: quest levels, then overall progress to 60 when it can be trusted
     local okPct, pct = pcall(PercentToCap)
-    local pctText = (okPct and pct) and ("  |cff808080-|r  |cffffd100%d%%|r"):format(pct) or ""
+    local pctText = (okPct and pct)
+        and ("  |cff808080-|r  |cffffd100%d.%02d%%|r"):format(math.floor(pct / 100), pct % 100) or ""
     local ok, _, lowestGreen, highestGray = pcall(Compute)
     if not ok or not lowestGreen then
         questText:SetText("|cffff5555Gray level: unavailable|r" .. pctText)
