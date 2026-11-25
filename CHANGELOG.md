@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.11.4] - 25.11.2026
+
+### Added
+- Rest of tier 4 zones
+
 ## [0.11.3] - 23.11.2026
 
 ### Added
