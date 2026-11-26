@@ -2,6 +2,11 @@
 
 GreyQuestLevel - personal vibecoded level challenge addon
 
+## [0.11.5] - 26.11.2026
+
+### Added
+- Tier 2 dungeons
+
 ## [0.11.4] - 25.11.2026
 
 ### Added
